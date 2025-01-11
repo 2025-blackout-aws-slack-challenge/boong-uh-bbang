@@ -12,6 +12,7 @@ from getClaudeTimetableResponse import get_claude_timetable_response
 from getClaudeMeetingResponse import get_claude_meeting_response
 from getClaudeMeetingPreference import get_claude_meeting_preference
 import eventScheduleAdjusting
+import re
 
 # 로깅 설정
 logger = logging.getLogger()
@@ -94,6 +95,8 @@ def lambda_handler(event, context):
     print(body)
     print(event_type)
 
+    print('parent_user_id:', parent_user_id, 'bot_user_id:', bot_user_id)
+
     try:
         # 이벤트 타입과 서브타입 체크
         event_type = body['event']['type']
@@ -104,7 +107,7 @@ def lambda_handler(event, context):
             # 멘션을 제외한 실제 메시지 추출
             print('combined_message:', combined_message)
 
-            if parent_user_id and parent_user_id != bot_user_id:
+            if parent_user_id != bot_user_id:
               # 봇을 통해 회의 정보 추출
               meeting_info, request = get_claude_meeting_response(bedrock_runtime, combined_message)
               # remove the bot from participants
@@ -145,21 +148,28 @@ def lambda_handler(event, context):
               participants_regex = r"<@([A-Z0-9]+)>님"
               duration_regex = r"회의 시간:\s*(\d+)\s*시간"
 
-              schedule_match = combined_message.search(schedule_regex, text)
-              duration_match = combined_message.search(duration_regex, text)
+              schedule_match = re.search(schedule_regex, combined_message)
+              duration_match = re.search(duration_regex, combined_message)
 
-              participants = combined_message.findall(participants_regex, text)
+              participants = re.findall(participants_regex, combined_message)
+              participants_set = set(participants)
+              participants = list(participants_set)
 
               start_date, end_date = schedule_match.groups() if schedule_match else (None, None)
               duration = int(duration_match.group(1)) if duration_match else None
 
+              print('start_date:', start_date, 'end_date:', end_date, 'duration:', duration, 'participants:', participants)
+
               users_schedule = eventScheduleAdjusting.get_user_schedules(participants)
 
+          
               weekdays = eventScheduleAdjusting.date_to_weekdays(start_date, end_date)
 
-              best_time_slots, max_participants, unavailable_people = eventScheduleAdjusting.find_best_time_slot(users_schedule, participants_id, duration, weekdays)
 
-              final_meeting_info, is_everyone_has_preference = eventScheduleAdjusting.get_final_meeting_info(bedrock_runtime, combined_message, best_time_slots)
+
+              best_time_slots, max_participants, unavailable_people = eventScheduleAdjusting.find_best_time_slot(users_schedule, participants, duration, weekdays)
+
+              final_meeting_info, is_everyone_has_preference = get_claude_meeting_preference(bedrock_runtime, combined_message, best_time_slots, bot_user_id)
 
               if is_everyone_has_preference:
                   # Send the final meeting schedule

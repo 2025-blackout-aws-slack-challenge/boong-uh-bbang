@@ -1,7 +1,7 @@
 from datetime import datetime
 import json
 
-def get_claude_meeting_preference(bedrock_runtime, prompt, best_time_slots):
+def get_claude_meeting_preference(bedrock_runtime, prompt, best_time_slots, bot_user_id):
 
     example_output = {
         "best_time": "2023-05-31 12:00",
@@ -40,6 +40,7 @@ Participants: The list of participants for the meeting. This will be given as sl
 Example output: {json.dumps(example_output)}
 
 Strictly follow the output format
+NOTE: The bot user ID is {bot_user_id}. The bot cannot participate in the meeting.
 
 # Format
 {json.dumps(meeting_structure)}
@@ -50,8 +51,15 @@ Strictly follow the output format
         
         content.append({
             "type": "text",
+            "text": f'''Possible meeting times: {best_time_slots}'''
+        })
+
+        content.append({
+            "type": "text",
             "text": prompt
         })
+
+        print("content:", content)
 
         # Bedrock 요청 바디 구성
         body = json.dumps({

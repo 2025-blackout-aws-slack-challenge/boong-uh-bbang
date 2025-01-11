@@ -42,10 +42,11 @@ def find_best_time_slot(users_schedule, user_id, duration, weekdays):
     time_slots = [f"{hour:02d}:{minute:02d}" for hour in range(12, 24) for minute in range(0, 60, 30)]
     best_time_slots = []
     max_participants = 0
+    unavailable = []
+
     for day in weekdays:
         for time_slot in time_slots:
             participants = 0
-            unavailable = []
             for person, schedule in users_schedule.items():
                 if person in user_id:
                     available = True

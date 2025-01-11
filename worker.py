@@ -104,6 +104,8 @@ def lambda_handler(event, context):
             print('combined_message:', combined_message)
 
             meeting_info, request = get_claude_meeting_response(bedrock_runtime, combined_message)
+            # remove the bot from participants
+            meeting_info['participants'] = [participant for participant in meeting_info['participants'] if participant != bot_user_id]
 
             if request:
                 # Request additional informatio
@@ -137,7 +139,7 @@ def lambda_handler(event, context):
                 for participant in participants_id:
                     response_message += f"<@{participant}>님 "
                 
-                response_message += "Circa가 회의 시간을 정했어요😁\n 불가능한 시간대를 알려주세요."
+                response_message += "\nCirca가 회의 시간을 정했어요😁\n불가능한 시간대를 알려주세요 🤓"
 
                 # Send extracted meeting information
                 slack_client.chat_postMessage(

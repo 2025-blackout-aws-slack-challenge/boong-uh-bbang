@@ -26,6 +26,7 @@ bedrock_runtime = boto3.client('bedrock-runtime', config=my_config)
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table('testDB')
 
+bot_user_id = slack_client.auth_test()['user_id']
 
 def get_claude_timetable_response(prompt, image_data, mimetype):
     timetable_structure = {
@@ -155,6 +156,7 @@ def get_claude_timetable_response(prompt, image_data, mimetype):
 def get_claude_meeting_response(prompt):
 
     today = datetime.now().strftime('%Y-%m-%d')
+    whatday = datetime.now().strftime('%A')
 
     example_output = {
         "meeting_duration": "1 hour",
@@ -167,18 +169,19 @@ def get_claude_meeting_response(prompt):
         "meeting_duration": "The duration of the meeting in hours or minutes. (e.g. 1 hour, 30 minutes)",
         "meeting_date_range": "The range of dates for the meeting. (e.g. 2023-05-31 to 2023-06-01)",
         "participants": "The list of participants for the meeting. This will be given as slack user IDs. (e.g. U01ABCDEF, U01GHIJKLM)",
-        "meeting_schedule_finalization_deadline": "The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31)"
+        "meeting_schedule_finalization_deadline": "The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31)",
+        "request": "회의 정보를 추출하기 위해 필요한 추가 정보를 요청하세요."
     }
 
     system_prompt = f'''You are a meeting scheduler for a school club. Users will request you to extract the meeting information from the message. Analyze the message and extract the following information: meeting duration, meeting date range, participants, and meeting schedule finalization deadline. 
 
 Meeting duration: The duration of the meeting in hours or minutes. (e.g. 1 hour, 30 minutes)
 
-Meeting date range: The range of dates for the meeting. (e.g. 2023-05-31 to 2023-06-01) Users may provide absolute dates or relative dates(e.g. tomorrow, next week), and you should convert them to absolute dates. Today's date is {today}. The output should be in the format of "YYYY-MM-DD to YYYY-MM-DD".
+Meeting date range: The range of dates for the meeting. (e.g. 2023-05-31 to 2023-06-01) Users may provide absolute dates or relative dates(e.g. tomorrow, next week), and you should convert them to absolute dates. Today's date is {today} {whatday}. The output should be in the format of "YYYY-MM-DD to YYYY-MM-DD".
 
 Participants: The list of participants for the meeting. This will be given as slack user IDs. (e.g. U01ABCDEF, U01GHIJKLM)
 
-Meeting schedule finalization deadline: The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31) Users may provide absolute dates or relative dates(e.g. tomorrow, next week), and you should convert them to absolute dates. Today's date is {today}. The output should be in the format of "YYYY-MM-DD".
+Meeting schedule finalization deadline: The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31) Users may provide absolute dates or relative dates(e.g. tomorrow, next week), and you should convert them to absolute dates. Today's date is {today} {whatday}. The output should be in the format of "YYYY-MM-DD".
 
 Example input: "Can we schedule a meeting for 1 hour during next week with @U01ABCDEF, @U01GHIJKLM? Let's finalize the schedule by tomorrow."
 
@@ -186,11 +189,12 @@ Example output: {json.dumps(example_output)}
 
 Strictly follow the output format
 
+If the given information is not enough to extract the meeting information, ask for the missing information in the 'request' field. If not, leave it empty.
+Request should be written in Korean.
+
 # Format
 {json.dumps(meeting_structure)}
  '''
-
-
 
     try:
         content = []
@@ -223,7 +227,14 @@ Strictly follow the output format
         
         # 응답 파싱
         response_body = json.loads(response['body'].read())
-        return response_body['content'][0]['text']
+        print("model response:", response_body['content'][0]['text'])
+
+        extracted_info = json.loads(response_body['content'][0]['text'])
+
+        request = extracted_info.get('request', None)
+        
+
+        return extracted_info, request
         
     except Exception as e:
         logger.error(f"Bedrock API 에러: {str(e)}")
@@ -249,53 +260,82 @@ def format_schedule(schedule):
         result += "\n"  # 하루 끝나면 빈 줄 추가
     return result
 
+def fetch_thread_messages(channel_id, thread_ts):
+    try:
+        response = slack_client.conversations_replies(channel=channel_id, ts=thread_ts)
+
+        return response['messages']
+    except SlackApiError as e:
+        logger.error(f"Failed to fetch thread messages: {e.response['error']}")
+        return []
+
+def combine_thread_messages(messages, bot_user_id):
+    """
+    Combine all messages in a thread into a single prompt,
+    including the sender's information, but exclude the bot's messages.
+    """
+    combined_message = ""
+    for message in messages:
+        # Skip messages sent by the bot
+        if message.get('user') == bot_user_id or 'bot_id' in message:
+            combined_message += f"Bot: {message.get('text', '')}\n"
+        
+        user_id = message.get('user', 'Unknown')
+        text = message.get('text', '')
+        combined_message += f"<@{user_id}>: {text}\n"
+    return combined_message.strip()
+
 def lambda_handler(event, context):
     # API Gateway에서 전달된 바디 파싱
     body = json.loads(event['body'])
     
     event_type = body['type']
     claude_response = ''
-    
+    thread_ts = body['event']['ts']
+    channel_id = body['event']['channel']
+    user_id = body['event']['user']
+    text = body['event']['text']
+
     print(body)
+    print(event_type)
 
     try:
         # 이벤트 타입과 서브타입 체크
         event_type = body['event']['type']
 
         if event_type == 'app_mention':
-            print("app_mention")
-            channel_id = body['event']['channel']
-            user_id = body['event']['user']
-            text = body['event']['text']
-            thread_ts = body['event']['ts']
-
+            thread_messages = fetch_thread_messages(channel_id, body['event']['thread_ts'] if 'thread_ts' in body['event'] else body['event']['ts'])
+            combined_message = combine_thread_messages(thread_messages, bot_user_id)
             # 멘션을 제외한 실제 메시지 추출
-            message = text.split('>', 1)[1].strip()
+            print('combined_message:', combined_message)
 
-            claude_response = get_claude_meeting_response(message)
+            meeting_info, request = get_claude_meeting_response(combined_message)
 
-            # 슬랙에 메시지 전송
+            if request:
+                # Request additional informatio
+                slack_client.chat_postMessage(
+                    channel=channel_id,
+                    text=f'''<@{user_id}>
+{request}
+''',
+                    thread_ts=thread_ts
+                )
+            else:
+                # Send extracted meeting information
+                slack_client.chat_postMessage(
+                    channel=channel_id,
+                    text=f'''<@{user_id}>
+모든 정보를 읽었습니다! 아래는 회의 일정입니다:
+{json.dumps(meeting_info, indent=2)}
 
-            slack_client.chat_postMessage(
-                channel=channel_id,
-                text=f'''<@{user_id}>
-회의 일정을 읽어왔어요! 아래는 유저의 회의 일정에요. 확인해주세요.
-{claude_response}
-
-유저 회의 일정을 업데이트했어요! 잘못된 부분이 있다면 말씀해주세요! 😊 ''',
-                thread_ts=thread_ts
- )
+유저 회의 일정을 업데이트했어요! 😊
+''',
+                    thread_ts=thread_ts
+                )
             
 
         if event_type == 'message' and body['event']['channel_type'] == 'im' and 'bot_profile' not in body['event']:
-            print("event_callback")
-
-            channel_id = body['event']['channel']
-            user_id = body['event']['user']
-            text = body['event']['text']
-            
             message = text
-
             image_base64 = ""
 
             if 'files' in body['event']:
@@ -357,10 +397,6 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': json.dumps({'error': str(e)})
         }
-    
-    # 디비 저장 로직
-    
-
 
     return {
         'statusCode': 200,

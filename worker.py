@@ -115,6 +115,8 @@ system_prompt = f'''You are a time table manager for a school club. Users will g
  '''
 
 def get_claude_response(prompt, image_data, mimetype):
+    
+
     try:
         content = []
 
@@ -130,7 +132,7 @@ def get_claude_response(prompt, image_data, mimetype):
         
         content.append({
             "type": "text",
-            "data": prompt
+            "text": prompt
         })
 
         # Bedrock 요청 바디 구성

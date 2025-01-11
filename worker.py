@@ -175,6 +175,8 @@ def download_image(url, headers=None):
         return response.read()
 
 def format_schedule(schedule):
+    schedule = json.loads(schedule)
+
     result = "### 유저 시간표 ###\n\n"
     for day, events in schedule.items():
         result += f"#### {day}\n"

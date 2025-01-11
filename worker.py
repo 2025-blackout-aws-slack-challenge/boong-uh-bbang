@@ -22,6 +22,9 @@ my_config = Config(
 
 bedrock_runtime = boto3.client('bedrock-runtime', config=my_config)
 
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table('testDB')
+
 timetable_structure = {
     "Monday": [
         {
@@ -170,6 +173,7 @@ def lambda_handler(event, context):
     body = json.loads(event['body'])
     
     event_type = body['type']
+    claude_response = ''
     
     try:
         # 이벤트 타입과 서브타입 체크
@@ -207,10 +211,6 @@ def lambda_handler(event, context):
                 text=f"<@{user_id}> {claude_response}"
             )
             
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'message': 'Success'})
-        }
         
     except SlackApiError as e:
         logger.error(f"Slack API 에러: {e.response['error']}")
@@ -224,3 +224,22 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': json.dumps({'error': str(e)})
         }
+    
+    # 디비 저장 로직
+    name = body['event']['user']
+    
+    try:
+        item = {
+            "name": name,
+            "schedule": claude_response,
+            "createdAt": datetime.utcnow().isoformat()
+        }
+        table.put_item(Item=item)
+        print(f"[INFO] DynamoDB 저장 완료: {item}")
+    except Exception as e:
+        print(f"[ERROR] DynamoDB 저장 중 오류 발생: {e}")
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps({'message': 'Success'})
+    }

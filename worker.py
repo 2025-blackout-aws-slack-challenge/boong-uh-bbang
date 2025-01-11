@@ -10,9 +10,8 @@ from slack_sdk.errors import SlackApiError
 from datetime import datetime
 from getClaudeTimetableResponse import get_claude_timetable_response
 from getClaudeMeetingResponse import get_claude_meeting_response
+from getClaudeMeetingPreference import get_claude_meeting_preference
 import eventScheduleAdjusting
-from collections import defaultdict
-
 
 # 로깅 설정
 logger = logging.getLogger()
@@ -90,6 +89,8 @@ def lambda_handler(event, context):
     user_id = body['event']['user']
     text = body['event']['text']
 
+    parent_user_id = body['event']['parent_user_id'] if 'parent_user_id' in body['event'] else None
+
     print(body)
     print(event_type)
 
@@ -103,49 +104,77 @@ def lambda_handler(event, context):
             # 멘션을 제외한 실제 메시지 추출
             print('combined_message:', combined_message)
 
-            meeting_info, request = get_claude_meeting_response(bedrock_runtime, combined_message)
-            # remove the bot from participants
-            meeting_info['participants'] = [participant for participant in meeting_info['participants'] if participant != bot_user_id]
+            if parent_user_id and parent_user_id != bot_user_id:
+              # 봇을 통해 회의 정보 추출
+              meeting_info, request = get_claude_meeting_response(bedrock_runtime, combined_message)
+              # remove the bot from participants
+              meeting_info['participants'] = [participant for participant in meeting_info['participants'] if participant != bot_user_id]
 
-            if request:
-                # Request additional informatio
-                slack_client.chat_postMessage(
-                    channel=channel_id,
-                    text=f'''<@{user_id}> {request} ''',
-                    thread_ts=thread_ts
-                )
+              if request:
+                  # Request additional informatio
+                  slack_client.chat_postMessage(
+                      channel=channel_id,
+                      text=f'''<@{user_id}> {request} ''',
+                      thread_ts=thread_ts
+                  )
+              else:
+                  [start_date, end_date] = meeting_info['meeting_date_range'].split(' to ')
+                  participants_id = meeting_info['participants']
+                  duration = meeting_info['meeting_duration']
+                  finalize_deadline = meeting_info['meeting_schedule_finalization_deadline']
+
+                  response_message = ''
+
+                  response_message += f"회의 일정: {start_date} ~ {end_date} \n"
+                  response_message += f"회의 참석자: "
+                  for participant in participants_id:
+                      response_message += f"<@{participant}>님 "
+
+                  response_message += f"\n회의 시간: {duration} 시간 \n"
+
+                  response_message += "다들 회의 괜찮으신가요? 의견을 남겨주세요! 😊"
+
+                  # Send extracted meeting information
+                  slack_client.chat_postMessage(
+                      channel=channel_id,
+                      text=response_message
+                  )
             else:
-                [start_date, end_date] = meeting_info['meeting_date_range'].split(' to ')
-                participants_id = meeting_info['participants']
-                duration = meeting_info['meeting_duration']
-                finalize_deadline = meeting_info['meeting_schedule_finalization_deadline']
+              # 유저 의견을 받고 최종 회의 일정을 잡는다.
+              schedule_regex = r"회의 일정:\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})"
+              participants_regex = r"<@([A-Z0-9]+)>님"
+              duration_regex = r"회의 시간:\s*(\d+)\s*시간"
 
-                user_schedules = eventScheduleAdjusting.get_user_schedules(participants_id)
-                weekdays = eventScheduleAdjusting.date_to_weekdays(start_date, end_date)
-                
-                best_time_slots, max_participants, unavailable_people = eventScheduleAdjusting.find_best_time_slot(user_schedules, participants_id, duration, weekdays)
-                
-                response_message = ''
+              schedule_match = combined_message.search(schedule_regex, text)
+              duration_match = combined_message.search(duration_regex, text)
 
-                slots_by_day = defaultdict(list)
-                for day, time in best_time_slots:
-                    slots_by_day[day].append(time)
-                for day, times in slots_by_day.items():
-                    response_message += f"{day}: {', '.join(times[:2])} \n"
-                if best_time_slots:
-                    response_message += (f"참석 인원: {max_participants} 명 \n")
-                else:
-                    response_message += ("태그된 참여자가 모두 참석할 수 있는 시간대가 없습니다😢 다시 한번 일정을 확인해주세요. \n") 
-                for participant in participants_id:
-                    response_message += f"<@{participant}>님 "
-                
-                response_message += "\nCirca가 회의 시간을 정했어요😁\n불가능한 시간대를 알려주세요 🤓"
+              participants = combined_message.findall(participants_regex, text)
 
-                # Send extracted meeting information
-                slack_client.chat_postMessage(
-                    channel=channel_id,
-                    text=response_message
-                )
+              start_date, end_date = schedule_match.groups() if schedule_match else (None, None)
+              duration = int(duration_match.group(1)) if duration_match else None
+
+              users_schedule = eventScheduleAdjusting.get_user_schedules(participants)
+
+              weekdays = eventScheduleAdjusting.date_to_weekdays(start_date, end_date)
+
+              best_time_slots, max_participants, unavailable_people = eventScheduleAdjusting.find_best_time_slot(users_schedule, participants_id, duration, weekdays)
+
+              final_meeting_info, is_everyone_has_preference = eventScheduleAdjusting.get_final_meeting_info(bedrock_runtime, combined_message, best_time_slots)
+
+              if is_everyone_has_preference:
+                  # Send the final meeting schedule
+                  response_message = "회의 일정이 잡혔어요! 아래는 회의 일정이에요. 확인해주세요.\n"
+                  response_message += f"회의 일정: {final_meeting_info['best_time']}\n"
+                  response_message += "참석자: "
+                  for participant in final_meeting_info['participants']:
+                      response_message += f"<@{participant['user_id']}>님 "
+              
+                  slack_client.chat_postMessage(
+                      channel=channel_id,
+                      text=response_message
+                  )
+              else:
+                  pass
 
         if event_type == 'message' and body['event']['channel_type'] == 'im' and 'bot_profile' not in body['event']:
             message = text

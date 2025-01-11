@@ -221,7 +221,7 @@ def lambda_handler(event, context):
                     image_base64 = base64.b64encode(image_data).decode('utf-8')
             
             # Bedrock을 통해 Claude 응답 생성
-            claude_response = get_claude_response(message, image_base64, ('image/' + file_info['filetype']) if image_base64 else None)
+            claude_response = get_claude_response(message, image_base64, fetched_file['mimetype'] if base64 else None)
             
             readable_schedule = format_schedule(claude_response)
 

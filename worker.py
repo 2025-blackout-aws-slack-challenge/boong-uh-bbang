@@ -111,6 +111,9 @@ system_prompt = f'''You are a time table manager for a school club. Users will g
 # Format
 {json.dumps(timetable_structure)}
 
+# Example
+{json.dumps(timetable_example)}
+
 # Note
 - If the given information is not enough to extract the timetable, leave the timetable empty. Do not ask for additional information.
  '''
@@ -220,7 +223,7 @@ def lambda_handler(event, context):
             # Bedrock을 통해 Claude 응답 생성
             claude_response = get_claude_response(message, image_base64, file_info['mimetype'] if image_base64 else None)
             
-            readable_schedule = format_schedule(timetable_example)
+            readable_schedule = format_schedule(claude_response)
 
             # 슬랙에 메시지 전송
             slack_client.chat_postMessage(

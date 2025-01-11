@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import boto3
+from botocore.config import Config
 import urllib.request
 import base64
 from slack_sdk import WebClient
@@ -14,7 +15,12 @@ logger.setLevel(logging.INFO)
 # Slack & Bedrock 클라이언트 초기화
 SLACK_BOT_TOKEN = os.environ['SLACK_BOT_TOKEN']
 slack_client = WebClient(token=SLACK_BOT_TOKEN)
-bedrock_runtime = boto3.client('bedrock-runtime')
+
+my_config = Config(
+    region_name = 'us-west-2'
+)
+
+bedrock_runtime = boto3.client('bedrock-runtime', config=my_config)
 
 def get_claude_response(prompt, image_data):
     try:
@@ -45,7 +51,7 @@ def get_claude_response(prompt, image_data):
         
         # Bedrock API 호출
         response = bedrock_runtime.invoke_model(
-            modelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
+            modelId='anthropic.claude-3-5-sonnet-20241022-v2:0',
             contentType='application/json',
             body=body
         )

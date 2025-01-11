@@ -111,9 +111,6 @@ system_prompt = f'''You are a time table manager for a school club. Users will g
 # Format
 {json.dumps(timetable_structure)}
 
-# Example
-{json.dumps(timetable_example)}
-
 # Note
 - If the given information is not enough to extract the timetable, leave the timetable empty. Do not ask for additional information.
  '''

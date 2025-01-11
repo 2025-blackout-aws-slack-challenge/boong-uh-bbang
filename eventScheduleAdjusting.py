@@ -70,6 +70,28 @@ def find_best_time_slot(users_schedule, user_id, duration, weekdays):
                 best_time_slots.append((day, time_slot))
     return best_time_slots, max_participants, unavailable
 
+def get_user_schedules(participants_id):
+    data = []
+    for participant_id in participants_id:
+        response = table.query(
+            KeyConditionExpression = Key('name').eq(participant_id)
+        )
+        data.extend(response.get('Items', []))
+    
+    users_schedule = {}
+
+    for user in data:
+        participant_id = user["name"]
+        schedule_data = json.loads(user["schedule"])
+        times = []
+        for day, day_schedule in schedule_data.items():
+            for item in day_schedule:
+                start_time = item["start_time"]
+                end_time = item["end_time"]
+                times.append((day, start_time, end_time))
+        users_schedule[participant_id] = times
+
+    return users_schedule
 
 def lambda_handler(event, context):
     # 불가능한 시간 조정
@@ -83,34 +105,7 @@ def lambda_handler(event, context):
 
 
     ## 알고리즘으로 시간표 다시 계산
-    data = []
-
-    try:
-        for participant_id in participants_id:
-            response = table.query(
-                KeyConditionExpression = Key('name').eq(participant_id)
-            )
-            data.extend(response.get('Items', []))
-        print(f"DB 불러오기 성공 : {data}")
-    except Exception as e:
-        print(f"DB 불러오기 실패 : {e}")
-        print(traceback.format_exc())
-
-
-    users_schedule = {}
-
-
-
-    for user in data:
-        participant_id = user["name"]
-        schedule_data = json.loads(user["schedule"])
-        times = []
-        for day, day_schedule in schedule_data.items():
-            for item in day_schedule:
-                start_time = item["start_time"]
-                end_time = item["end_time"]
-                times.append((day, start_time, end_time))
-        users_schedule[participant_id] = times
+    users_schedule = get_user_schedules(participants_id)
 
     weekdays = date_to_weekdays(start_date, end_date)
 

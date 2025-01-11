@@ -10,6 +10,7 @@ from slack_sdk.errors import SlackApiError
 from datetime import datetime
 from getClaudeTimetableResponse import get_claude_timetable_response
 from getClaudeMeetingResponse import get_claude_meeting_response
+import eventScheduleAdjusting
 
 # 로깅 설정
 logger = logging.getLogger()
@@ -29,9 +30,6 @@ dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table('testDB')
 
 bot_user_id = slack_client.auth_test()['user_id']
-
-
-
 
 
 def download_image(url, headers=None):
@@ -109,24 +107,43 @@ def lambda_handler(event, context):
                 # Request additional informatio
                 slack_client.chat_postMessage(
                     channel=channel_id,
-                    text=f'''<@{user_id}>
-{request}
-''',
+                    text=f'''<@{user_id}> {request} ''',
                     thread_ts=thread_ts
                 )
             else:
+                [start_date, end_date] = meeting_info['meeting_date_range'].split(' to ')
+                participants_id = meeting_info['participants']
+                duration = meeting_info['meeting_duration']
+                finalize_deadline = meeting_info['meeting_schedule_finalization_deadline']
+
+                user_schedules = eventScheduleAdjusting.get_user_schedules(participants_id)
+                weekdays = eventScheduleAdjusting.date_to_weekdays(start_date, end_date)
+                
+                best_time_slots, max_participants, unavailable_people = eventScheduleAdjusting.find_best_time_slot(user_schedules, participants_id, duration, weekdays)
+                
+                response_message = ''
+
+                if best_time_slots:
+                    response_message += f"최적의 시간대 (참석 가능한 최대 인원: {max_participants}명):\n"
+                    for day, time in best_time_slots:
+                        response_message += f"{day} {time}\n"
+                    if unavailable_people:
+                        response_message += f"불참자 수: {len(unavailable_people)}\n"
+                    else:
+                        response_message += "불참자가 없습니다.\n"
+                else:
+                    response_message += "모든 필수 참여자가 참석할 수 있는 시간대가 없습니다.\n"
+
+                for participant in participants_id:
+                    response_message += f"<@{participant}>님 "
+                
+                response_message += "불가능한 시간대가 있나요? 알려주세요!"
+
                 # Send extracted meeting information
                 slack_client.chat_postMessage(
                     channel=channel_id,
-                    text=f'''<@{user_id}>
-모든 정보를 읽었습니다! 아래는 회의 일정입니다:
-{json.dumps(meeting_info, indent=2)}
-
-유저 회의 일정을 업데이트했어요! 😊
-''',
-                    thread_ts=thread_ts
+                    text=response_message
                 )
-            
 
         if event_type == 'message' and body['event']['channel_type'] == 'im' and 'bot_profile' not in body['event']:
             message = text
@@ -177,7 +194,6 @@ def lambda_handler(event, context):
                 print(f"[INFO] DynamoDB 저장 완료: {item}")
             except Exception as e:
                 print(f"[ERROR] DynamoDB 저장 중 오류 발생: {e}")
-            
         
     except SlackApiError as e:
         logger.error(f"Slack API 에러: {e.response['error']}")

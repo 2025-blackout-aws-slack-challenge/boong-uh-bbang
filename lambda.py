@@ -22,28 +22,123 @@ my_config = Config(
 
 bedrock_runtime = boto3.client('bedrock-runtime', config=my_config)
 
-def get_claude_response(prompt, image_data):
+timetable_structure = {
+    "Monday": [
+        {
+            "start_time": "The start time of the class. (e.g. 09:00)",
+            "end_time": "The end time of the class. (e.g. 10:00)",
+            "name": "The name of the class. (e.g. Introduction to Computer Science)",
+            "index": "The index of the class. (e.g. 1)"
+        }
+    ],
+    "Tuesday": [],
+    "Wednesday": [],
+    "Thursday": [],
+    "Friday": []
+}
+
+timetable_example = {
+  "Monday": [
+    {
+      "start_time": "11:00",
+      "end_time": "12:00",
+      "name": "사회물리학: 네트워크적 접근",
+      "index": 1
+    },
+    {
+      "start_time": "13:00",
+      "end_time": "15:00",
+      "name": "AI 원리 및 최신기술",
+      "index": 2
+    },
+  ],
+  "Tuesday": [
+    {
+      "start_time": "09:00",
+      "end_time": "12:00",
+      "name": "확장현실 프로젝트",
+      "index": 1
+    },
+    {
+      "start_time": "13:00",
+      "end_time": "14:00",
+      "name": "다변수해석학과 응용",
+      "index": 2
+    }
+  ],
+  "Wednesday": [],
+  "Thursday": [
+    {
+      "start_time": "11:00",
+      "end_time": "12:00",
+      "name": "사회물리학: 네트워크적 접근",
+      "index": 1
+    },
+    {
+      "start_time": "13:00",
+      "end_time": "14:00",
+      "name": "다변수해석학과 응용",
+      "index": 2
+    },
+    {
+      "start_time": "16:00",
+      "end_time": "17:00",
+      "name": "프로그래밍 언어 및 컴파일러",
+      "index": 3
+    },
+    {
+      "start_time": "16:00",
+      "end_time": "17:00",
+      "name": "GIST대학 콜로퀴움",
+      "index": 4
+    },
+    {
+      "start_time": "18:00",
+      "end_time": "20:00",
+      "name": "다변수해석학과 응용",
+      "index": 5
+    }
+  ],
+  "Friday": []
+}
+
+system_prompt = f'''You are a time table manager for a school club. Users will give you their timetables in various formats, not limited to text and images. Analyze the message and extract the timetable information. Respond with the extracted information in the following structured format:
+
+# Format
+{json.dumps(timetable_structure)}
+
+# Example
+{json.dumps(timetable_example)}
+ '''
+
+def get_claude_response(prompt, image_data, mimetype):
     try:
-        # Bedrock 요청 바디 구성
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1024,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
+        content = []
+
+        if image_data:
+            content.append({
                             "type": "image",
                             "source": {
                                 "type": "base64",
-                                "media_type": "image/png",
+                                "media_type": mimetype,
                                 "data": image_data
                             }
-                        }, {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
+                        })
+        
+        content.append({
+            "type": "text",
+            "data": prompt
+        })
+
+        # Bedrock 요청 바디 구성
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4096,
+            "system": system_prompt,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": content
                 }
             ],
             "temperature": 0.7
@@ -104,7 +199,7 @@ def lambda_handler(event, context):
                     image_base64 = base64.b64encode(image_data).decode('utf-8')
             
             # Bedrock을 통해 Claude 응답 생성
-            claude_response = get_claude_response(message, image_base64)
+            claude_response = get_claude_response(message, image_base64, file_info['mimetype'] if image_base64 else None)
             
             # 슬랙에 메시지 전송
             slack_client.chat_postMessage(

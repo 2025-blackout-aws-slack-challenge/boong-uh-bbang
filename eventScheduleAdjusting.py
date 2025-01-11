@@ -41,6 +41,7 @@ def is_time_overlapping(time_slot, duration, start_time, end_time):
 def find_best_time_slot(users_schedule, user_id, duration, weekdays):
     time_slots = [f"{hour:02d}:{minute:02d}" for hour in range(12, 24) for minute in range(0, 60, 30)]
     best_time_slots = []
+    unavailable = []
     max_participants = 0
     unavailable = []
 
@@ -101,14 +102,39 @@ def lambda_handler(event, context):
 
     # 회의 정보 가져오기
 
-    participants_id = ['U0792169H4Y', 'U0430P2DSVA', 'UH73HNUFR']
+    participants_id = ['U0792169H4Y', 'U0430P2DSVA', 'UH73HNUFR', 'something-random']
     start_date = "2025-01-11"
     end_date = "2025-01-17"
     duration = 0.5  # 30분
 
 
     ## 알고리즘으로 시간표 다시 계산
-    users_schedule = get_user_schedules(participants_id)
+    data = []
+
+    try:
+        for participant_id in participants_id:
+            response = table.query(
+                KeyConditionExpression = Key('name').eq(participant_id)
+            )
+            data.extend(response.get('Items', []))
+        print(f"DB 불러오기 성공 : {data}")
+    except Exception as e:
+        print(f"DB 불러오기 실패 : {e}")
+        print(traceback.format_exc())
+
+
+    users_schedule = {}
+
+    for user in data:
+        participant_id = user["name"]
+        schedule_data = json.loads(user["schedule"])
+        times = []
+        for day, day_schedule in schedule_data.items():
+            for item in day_schedule:
+                start_time = item["start_time"]
+                end_time = item["end_time"]
+                times.append((day, start_time, end_time))
+        users_schedule[participant_id] = times
 
     weekdays = date_to_weekdays(start_date, end_date)
 

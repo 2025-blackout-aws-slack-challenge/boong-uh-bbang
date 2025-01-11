@@ -174,6 +174,18 @@ def download_image(url, headers=None):
     with urllib.request.urlopen(req) as response:
         return response.read()
 
+def format_schedule(schedule):
+    result = "### 유저 시간표 ###\n\n"
+    for day, events in schedule.items():
+        result += f"#### {day}\n"
+        if events:
+            for event in events:
+                result += f"- **{event['name']}**: {event['start_time']} ~ {event['end_time']}\n"
+        else:
+            result += "- 일정 없음\n"
+        result += "\n"  # 하루 끝나면 빈 줄 추가
+    return result
+
 def lambda_handler(event, context):
     # API Gateway에서 전달된 바디 파싱
     body = json.loads(event['body'])
@@ -211,10 +223,17 @@ def lambda_handler(event, context):
             # Bedrock을 통해 Claude 응답 생성
             claude_response = get_claude_response(message, image_base64, file_info['mimetype'] if image_base64 else None)
             
+            readable_schedule = format_schedule(timetable_example)
+
             # 슬랙에 메시지 전송
             slack_client.chat_postMessage(
                 channel=channel_id,
-                text=f"<@{user_id}> {claude_response}"
+                text=f'''<@{user_id}>
+시간표를 읽어왔어요! 아래는 유저의 시간표에요. 확인해주세요.
+{readable_schedule}
+
+유저 시간표를 업데이트했어요! 잘못된 부분이 있다면 말씀해주세요! 😊
+'''
             )
             
         

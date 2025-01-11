@@ -101,7 +101,7 @@ system_prompt = f'''You are a time table manager for a school club. Users will g
  '''
 
 def get_claude_response(prompt, image_data, mimetype):
-    
+    prompt = prompt if prompt else "empty"
 
     try:
         content = []
@@ -177,14 +177,14 @@ def lambda_handler(event, context):
     event_type = body['type']
     claude_response = ''
     
+    print(body)
+
     try:
         # 이벤트 타입과 서브타입 체크
         event_type = body['event']['type']
 
         if event_type == 'app_mention':
             print("app_mention")
-
-        if event_type == 'event_callback':
             channel_id = body['event']['channel']
             user_id = body['event']['user']
             text = body['event']['text']
@@ -192,13 +192,28 @@ def lambda_handler(event, context):
             # 멘션을 제외한 실제 메시지 추출
             message = text.split('>', 1)[1].strip()
 
+        if event_type == 'message' and body['event']['channel_type'] == 'im' and 'bot_profile' not in body['event']:
+            print("event_callback")
+
+            channel_id = body['event']['channel']
+            user_id = body['event']['user']
+            text = body['event']['text']
+            
+            message = text
+
             image_base64 = ""
 
             if 'files' in body['event']:
                 file_info = body['event']['files'][0]
-                if file_info['mimetype'].startswith('image/'):
+                print('file_info:', file_info)
+
+                if file_info['filetype'] in ['jpg', 'jpeg', 'png']:
+                    fetched_file = slack_client.files_info(file=file_info['id'])['file']
+
+                    print('fetched_file:', fetched_file)
+
                     # 이미지 다운로드
-                    file_url = file_info['url_private']
+                    file_url = fetched_file['url_private']
                     headers = {'Authorization': f'Bearer {SLACK_BOT_TOKEN}'}
                     image_data = download_image(file_url, headers)
                     
@@ -206,7 +221,7 @@ def lambda_handler(event, context):
                     image_base64 = base64.b64encode(image_data).decode('utf-8')
             
             # Bedrock을 통해 Claude 응답 생성
-            claude_response = get_claude_response(message, image_base64, file_info['mimetype'] if image_base64 else None)
+            claude_response = get_claude_response(message, image_base64, ('image/' + file_info['filetype']) if image_base64 else None)
             
             readable_schedule = format_schedule(claude_response)
 
@@ -222,6 +237,8 @@ def lambda_handler(event, context):
             )
 
             try:
+                name = body['event']['user']
+
                 item = {
                     "name": name,
                     "schedule": claude_response,
@@ -247,7 +264,6 @@ def lambda_handler(event, context):
         }
     
     # 디비 저장 로직
-    name = body['event']['user']
     
 
 

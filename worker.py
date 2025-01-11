@@ -62,12 +62,6 @@ timetable_example = {
       "end_time": "12:00",
       "name": "확장현실 프로젝트",
       "index": 1
-    },
-    {
-      "start_time": "13:00",
-      "end_time": "14:00",
-      "name": "다변수해석학과 응용",
-      "index": 2
     }
   ],
   "Wednesday": [],
@@ -89,18 +83,6 @@ timetable_example = {
       "end_time": "17:00",
       "name": "프로그래밍 언어 및 컴파일러",
       "index": 3
-    },
-    {
-      "start_time": "16:00",
-      "end_time": "17:00",
-      "name": "GIST대학 콜로퀴움",
-      "index": 4
-    },
-    {
-      "start_time": "18:00",
-      "end_time": "20:00",
-      "name": "다변수해석학과 응용",
-      "index": 5
     }
   ],
   "Friday": []
@@ -198,10 +180,11 @@ def lambda_handler(event, context):
     try:
         # 이벤트 타입과 서브타입 체크
         event_type = body['event']['type']
-        
-        # app_mention 이벤트 처리
+
         if event_type == 'app_mention':
             print("app_mention")
+
+        if event_type == 'event_callback':
             channel_id = body['event']['channel']
             user_id = body['event']['user']
             text = body['event']['text']
@@ -237,6 +220,17 @@ def lambda_handler(event, context):
 유저 시간표를 업데이트했어요! 잘못된 부분이 있다면 말씀해주세요! 😊
 '''
             )
+
+            try:
+                item = {
+                    "name": name,
+                    "schedule": claude_response,
+                    "createdAt": datetime.utcnow().isoformat()
+                }
+                table.put_item(Item=item)
+                print(f"[INFO] DynamoDB 저장 완료: {item}")
+            except Exception as e:
+                print(f"[ERROR] DynamoDB 저장 중 오류 발생: {e}")
             
         
     except SlackApiError as e:
@@ -255,16 +249,7 @@ def lambda_handler(event, context):
     # 디비 저장 로직
     name = body['event']['user']
     
-    try:
-        item = {
-            "name": name,
-            "schedule": claude_response,
-            "createdAt": datetime.utcnow().isoformat()
-        }
-        table.put_item(Item=item)
-        print(f"[INFO] DynamoDB 저장 완료: {item}")
-    except Exception as e:
-        print(f"[ERROR] DynamoDB 저장 중 오류 발생: {e}")
+
 
     return {
         'statusCode': 200,

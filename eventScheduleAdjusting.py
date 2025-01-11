@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import boto3
 import traceback
 from boto3.dynamodb.conditions import Key
+from collections import defaultdict
 
 
 SLACK_BOT_TOKEN = os.environ['SLACK_BOT_TOKEN']
@@ -39,7 +40,7 @@ def is_time_overlapping(time_slot, duration, start_time, end_time):
 
 def find_best_time_slot(users_schedule, user_id, duration, weekdays):
     time_slots = [f"{hour:02d}:{minute:02d}" for hour in range(12, 24) for minute in range(0, 60, 30)]
-    best_time_slot = []
+    best_time_slots = []
     max_participants = 0
     for day in weekdays:
         for time_slot in time_slots:
@@ -68,6 +69,7 @@ def find_best_time_slot(users_schedule, user_id, duration, weekdays):
                 best_time_slots = [(day, time_slot)]
             elif participants == max_participants:
                 best_time_slots.append((day, time_slot))
+
     return best_time_slots, max_participants, unavailable
 
 def get_user_schedules(participants_id):
@@ -111,17 +113,15 @@ def lambda_handler(event, context):
 
     best_time_slots, max_participants, unavailable_people = find_best_time_slot(users_schedule, participants_id, duration, weekdays)
 
+    slots_by_day = defaultdict(list)
+    for day, time in best_time_slots:
+        slots_by_day[day].append(time)
+    for day, times in slots_by_day.items():
+        print(f"{day}: {', '.join(times[:2])}")
     if best_time_slots:
         print(f"최적의 시간대 (참석 가능한 최대 인원: {max_participants}명):")
-        for day, time in best_time_slots:
-            print(f"{day} {time}")
-        if unavailable_people:
-            print(f"불참자 수: {len(unavailable_people)}")
-        else:
-            print("불참자가 없습니다.")
     else:
-        print("모든 필수 참여자가 참석할 수 있는 시간대가 없습니다.")
-
+        print("모든 필수 참여자가 참석할 수 있는 시간대가 없습니다.") 
 
     """
     특정 슬랙 스레드의 메시지를 가져오는 함수

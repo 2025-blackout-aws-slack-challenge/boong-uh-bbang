@@ -7,14 +7,14 @@ def get_claude_meeting_response(bedrock_runtime, prompt):
     whatday = datetime.now().strftime('%A')
 
     example_output = {
-        "meeting_duration": "1 hour",
+        "meeting_duration": "1.5",
         "meeting_date_range": "2023-05-31 to 2023-06-01",
         "participants": ["U01ABCDEF", "U01GHIJKLM"],
         "meeting_schedule_finalization_deadline": "2023-05-31"
     }
 
     meeting_structure = {
-        "meeting_duration": "The duration of the meeting in hours or minutes. (e.g. 1 hour, 30 minutes)",
+        "meeting_duration": "The duration of the meeting in hours or minutes. (e.g. 1 for 1 hour, 1.5 for 1 hour 30 minutes) (integer or float)",
         "meeting_date_range": "The range of dates for the meeting. (e.g. 2023-05-31 to 2023-06-01)",
         "participants": "The list of participants for the meeting. This will be given as slack user IDs. (e.g. U01ABCDEF, U01GHIJKLM)",
         "meeting_schedule_finalization_deadline": "The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31)",
@@ -23,7 +23,7 @@ def get_claude_meeting_response(bedrock_runtime, prompt):
 
     system_prompt = f'''You are a meeting scheduler for a school club. Users will request you to extract the meeting information from the message. Analyze the message and extract the following information: meeting duration, meeting date range, participants, and meeting schedule finalization deadline. 
 
-Meeting duration: The duration of the meeting in hours or minutes. (e.g. 1 hour, 30 minutes)
+Meeting duration: The duration of the meeting in hours or minutes. (e.g. 1 for 1 hour, 1.5 for 1 hour 30 minutes) (integer or float)
 
 Meeting date range: The range of dates for the meeting. (e.g. 2023-05-31 to 2023-06-01) Users may provide absolute dates or relative dates(e.g. tomorrow, next week), and you should convert them to absolute dates. Today's date is {today} {whatday}. The output should be in the format of "YYYY-MM-DD to YYYY-MM-DD".
 

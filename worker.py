@@ -11,6 +11,8 @@ from datetime import datetime
 from getClaudeTimetableResponse import get_claude_timetable_response
 from getClaudeMeetingResponse import get_claude_meeting_response
 import eventScheduleAdjusting
+from collections import defaultdict
+
 
 # 로깅 설정
 logger = logging.getLogger()
@@ -123,21 +125,19 @@ def lambda_handler(event, context):
                 
                 response_message = ''
 
+                slots_by_day = defaultdict(list)
+                for day, time in best_time_slots:
+                    slots_by_day[day].append(time)
+                for day, times in slots_by_day.items():
+                    response_message += f"{day}: {', '.join(times[:2])} \n"
                 if best_time_slots:
-                    response_message += f"최적의 시간대 (참석 가능한 최대 인원: {max_participants}명):\n"
-                    for day, time in best_time_slots:
-                        response_message += f"{day} {time}\n"
-                    if unavailable_people:
-                        response_message += f"불참자 수: {len(unavailable_people)}\n"
-                    else:
-                        response_message += "불참자가 없습니다.\n"
+                    response_message += (f"참석 인원: {max_participants} 명 \n")
                 else:
-                    response_message += "모든 필수 참여자가 참석할 수 있는 시간대가 없습니다.\n"
-
+                    response_message += ("태그된 참여자가 모두 참석할 수 있는 시간대가 없습니다😢 다시 한번 일정을 확인해주세요. \n") 
                 for participant in participants_id:
                     response_message += f"<@{participant}>님 "
                 
-                response_message += "불가능한 시간대가 있나요? 알려주세요!"
+                response_message += "Circa가 회의 시간을 정했어요😁\n 불가능한 시간대를 알려주세요."
 
                 # Send extracted meeting information
                 slack_client.chat_postMessage(

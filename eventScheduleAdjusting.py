@@ -38,10 +38,9 @@ def is_time_overlapping(time_slot, duration, start_time, end_time):
     return not (slot_end <= start or slot_start >= end)
 
 def find_best_time_slot(users_schedule, user_id, duration, weekdays):
-    time_slots = [f"{hour:02d}:{minute:02d}" for hour in range(8, 24) for minute in range(0, 60, 30)]
-    best_time_slot = None
+    time_slots = [f"{hour:02d}:{minute:02d}" for hour in range(12, 24) for minute in range(0, 60, 30)]
+    best_time_slot = []
     max_participants = 0
-    best_unavailable_people = []
     for day in weekdays:
         for time_slot in time_slots:
             participants = 0
@@ -66,15 +65,22 @@ def find_best_time_slot(users_schedule, user_id, duration, weekdays):
                         participants += 1
             if participants > max_participants:
                 max_participants = participants
-                best_time_slot = (day, time_slot)
-                best_unavailable_people = unavailable
-    return best_time_slot, max_participants, best_unavailable_people    
+                best_time_slots = [(day, time_slot)]
+            elif participants == max_participants:
+                best_time_slots.append((day, time_slot))
+    return best_time_slots, max_participants, unavailable
 
 
 def lambda_handler(event, context):
     # 불가능한 시간 조정
 
+    # 회의 정보 가져오기
+
     participants_id = ['U0792169H4Y', 'U0430P2DSVA', 'UH73HNUFR']
+    start_date = "2025-01-11"
+    end_date = "2025-01-17"
+    duration = 0.5  # 30분
+
 
     ## 알고리즘으로 시간표 다시 계산
     data = []
@@ -91,13 +97,8 @@ def lambda_handler(event, context):
         print(traceback.format_exc())
 
 
-    # parsed_data = json.loads(data)
     users_schedule = {}
 
-    start_date = "2025-01-11"
-    end_date = "2025-01-13"
-    # user_id = ["서은원"]
-    duration = 0.5  # 30분
 
 
     for user in data:
@@ -113,7 +114,19 @@ def lambda_handler(event, context):
 
     weekdays = date_to_weekdays(start_date, end_date)
 
-    print(find_best_time_slot(users_schedule, participants_id, duration, weekdays))
+    best_time_slots, max_participants, unavailable_people = find_best_time_slot(users_schedule, participants_id, duration, weekdays)
+
+    if best_time_slots:
+        print(f"최적의 시간대 (참석 가능한 최대 인원: {max_participants}명):")
+        for day, time in best_time_slots:
+            print(f"{day} {time}")
+        if unavailable_people:
+            print(f"불참자 수: {len(unavailable_people)}")
+        else:
+            print("불참자가 없습니다.")
+    else:
+        print("모든 필수 참여자가 참석할 수 있는 시간대가 없습니다.")
+
 
     """
     특정 슬랙 스레드의 메시지를 가져오는 함수
@@ -121,19 +134,23 @@ def lambda_handler(event, context):
     :param thread_ts: 스레드의 시작 메시지 타임스탬프
     :return: 스레드 메시지 목록
     """
-    # try:
-    #     # conversations.replies API 호출
-    #     response = client.conversations_replies(channel=channel_id, ts=thread_ts)
+    body = json.loads(event['body'])
 
-    #     # 메시지 목록 반환
-    #     messages = response.get("messages", [])
-    #     return messages
-    # except SlackApiError as e:
-    #     print(f"Error fetching thread messages: {e.response['error']}")
-    #     return []
+    thread_ts = body['event']['ts']
+    channel_id = body['event']['channel']
 
-    # return {
-    #     'statusCode': 200,
-    #     'body': json.dumps('good')
-    # }
+    try:
+        response = client.conversations_replies(channel=channel_id, ts=thread_ts)
+
+        messages = response.get("messages", [])
+        print(messages)
+        return messages
+    except SlackApiError as e:
+        print(f"Error fetching thread messages: {e.response['error']}")
+        return []
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('good')
+    }
 

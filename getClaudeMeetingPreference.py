@@ -39,7 +39,8 @@ Participants: The list of participants for the meeting. This will be given as sl
 
 Example output: {json.dumps(example_output)}
 
-Strictly follow the output format
+Strictly follow the output format. Everything should be in the exact format as provided in the example output. No additional information or content should be added.
+
 NOTE: The bot user ID is {bot_user_id}. The bot cannot participate in the meeting.
 
 # Format

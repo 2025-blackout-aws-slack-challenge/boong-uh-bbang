@@ -43,14 +43,14 @@ def download_image(url, headers=None):
 def format_schedule(schedule):
     schedule = json.loads(schedule)
 
-    result = "### 유저 시간표 ###\n\n"
+    result = "*유저 시간표*\n\n"
     for day, events in schedule.items():
-        result += f"#### {day}\n"
+        result += f"- {day}\n"
         if events:
             for event in events:
-                result += f"- **{event['name']}**: {event['start_time']} ~ {event['end_time']}\n"
+                result += f"  - *{event['name']}*: {event['start_time']} ~ {event['end_time']}\n"
         else:
-            result += "- 일정 없음\n"
+            result += "  - 일정 없음\n"
         result += "\n"  # 하루 끝나면 빈 줄 추가
     return result
 
@@ -83,17 +83,16 @@ def lambda_handler(event, context):
     # API Gateway에서 전달된 바디 파싱
     body = json.loads(event['body'])
     
+    print(body)
+
     event_type = body['type']
     claude_response = ''
     thread_ts = body['event']['ts']
     channel_id = body['event']['channel']
-    user_id = body['event']['user']
+    user_id = body['event'].get('user')
     text = body['event']['text']
 
     parent_user_id = body['event']['parent_user_id'] if 'parent_user_id' in body['event'] else None
-
-    print(body)
-    print(event_type)
 
     print('parent_user_id:', parent_user_id, 'bot_user_id:', bot_user_id)
 
@@ -128,12 +127,12 @@ def lambda_handler(event, context):
 
                   response_message = ''
 
-                  response_message += f"회의 일정: {start_date} ~ {end_date} \n"
-                  response_message += f"회의 참석자: "
+                  response_message += f"*회의 일정*: {start_date} ~ {end_date} \n"
+                  response_message += f"*회의 참석자*: "
                   for participant in participants_id:
                       response_message += f"<@{participant}>님 "
 
-                  response_message += f"\n회의 시간: {duration} 시간 \n"
+                  response_message += f"\n*회의 시간*: {duration} 시간 \n"
 
                   response_message += "다들 회의 괜찮으신가요? 의견을 남겨주세요! 😊"
 
@@ -144,9 +143,9 @@ def lambda_handler(event, context):
                   )
             else:
               # 유저 의견을 받고 최종 회의 일정을 잡는다.
-              schedule_regex = r"회의 일정:\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})"
+              schedule_regex = r"\*회의 일정\*:\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})"
               participants_regex = r"<@([A-Z0-9]+)>님"
-              duration_regex = r"회의 시간:\s*(\d+)\s*시간"
+              duration_regex = r"\*회의 시간\*:\s*(\d+(?:\.\d+)?)\s*시간"
 
               schedule_match = re.search(schedule_regex, combined_message)
               duration_match = re.search(duration_regex, combined_message)
@@ -156,7 +155,7 @@ def lambda_handler(event, context):
               participants = list(participants_set)
 
               start_date, end_date = schedule_match.groups() if schedule_match else (None, None)
-              duration = int(duration_match.group(1)) if duration_match else None
+              duration = float(duration_match.group(1)) if duration_match else None
 
               print('start_date:', start_date, 'end_date:', end_date, 'duration:', duration, 'participants:', participants)
 
@@ -174,8 +173,8 @@ def lambda_handler(event, context):
               if is_everyone_has_preference:
                   # Send the final meeting schedule
                   response_message = "회의 일정이 잡혔어요! 아래는 회의 일정이에요. 확인해주세요.\n"
-                  response_message += f"회의 일정: {final_meeting_info['best_time']}\n"
-                  response_message += "참석자: "
+                  response_message += f"*회의 일정*: {final_meeting_info['best_time']}\n"
+                  response_message += "*참석자*: "
                   for participant in final_meeting_info['participants']:
                       response_message += f"<@{participant['user_id']}>님 "
               

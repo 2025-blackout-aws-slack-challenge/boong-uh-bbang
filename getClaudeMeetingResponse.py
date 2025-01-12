@@ -10,23 +10,6 @@ def get_claude_meeting_response(bedrock_runtime, prompt):
         "meeting_duration": "1.5",
         "meeting_date_range": "2023-05-31 to 2023-06-01",
         "participants": ["U01ABCDEF", "U01GHIJKLM"],
-        "unavailable_times": [
-            {
-                "participant": "U01ABCDEF",
-                "times": [
-                    {
-                        "date": "2023-05-31",
-                        "start_time": "12:00",
-                        "end_time": "13:00"
-                    },
-                    {
-                        "date": "2023-06-01",
-                        "start_time": "12:00",
-                        "end_time": "13:00"
-                    }
-                ]
-            }
-        ],
         "meeting_schedule_finalization_deadline": "2023-05-31"
     }
 
@@ -35,18 +18,6 @@ def get_claude_meeting_response(bedrock_runtime, prompt):
         "meeting_date_range": "The range of dates for the meeting. (e.g. 2023-05-31 to 2023-06-01)",
         "participants": "The list of participants for the meeting. This will be given as slack user IDs. (e.g. U01ABCDEF, U01GHIJKLM)",
         "meeting_schedule_finalization_deadline": "The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31)",
-        "unavailable_times": [
-            {
-                "participant": "The slack user ID of the participant.",
-                "times": [
-                    {
-                        "date": "The date of the unavailable time. (e.g. 2023-05-31)",
-                        "start_time": "The start time of the unavailable time. (e.g. 12:00)",
-                        "end_time": "The end time of the unavailable time. (e.g. 13:00)"
-                    }
-                ]
-            }
-        ],
         "request": "회의 정보를 추출하기 위해 필요한 추가 정보를 요청하세요."
     }
 
@@ -59,8 +30,6 @@ Meeting date range: The range of dates for the meeting. (e.g. 2023-05-31 to 2023
 Participants: The list of participants for the meeting. This will be given as slack user IDs. (e.g. U01ABCDEF, U01GHIJKLM)
 
 Meeting schedule finalization deadline: The deadline for finalizing the meeting schedule. This will be given as a date. (e.g. 2023-05-31) Users may provide absolute dates or relative dates(e.g. tomorrow, next week), and you should convert them to absolute dates. Today's date is {today} {whatday}. The output should be in the format of "YYYY-MM-DD".
-
-Unavailable times: The list of unavailable times for each participant. Leave it empty if not provided. Read the conversation carefully to extract the unavailable times for each participant. For example, "I'll have a dinner with my family at 6 PM tomorrow." means the user is unavailable from 6 PM to 7 PM tomorrow.
 
 Example input: "Can we schedule a meeting for 1 hour during next week with @U01ABCDEF, @U01GHIJKLM? Let's finalize the schedule by tomorrow."
 

@@ -170,10 +170,22 @@ def lambda_handler(event, context):
 
               final_meeting_info, is_everyone_has_preference = get_claude_meeting_preference(bedrock_runtime, combined_message, best_time_slots, bot_user_id)
 
+              [best_date, best_time] = final_meeting_info['best_time'].split(' ')
+
+              # 문자열을 datetime 객체로 변환
+              date_object = datetime.strptime(best_date, "%Y-%m-%d")
+
+              # 요일 숫자 (0=월요일, 6=일요일)
+              day_of_week = date_object.weekday()
+
+              # 한국어로 요일 이름 매핑
+              days_korean = ["월", "화", "수", "목", "금", "토", "일"]
+              day_name_korean = days_korean[day_of_week]
+
               if is_everyone_has_preference:
                   # Send the final meeting schedule
                   response_message = "회의 일정이 잡혔어요! 아래는 회의 일정이에요. 확인해주세요.\n"
-                  response_message += f"*회의 일정*: {final_meeting_info['best_time']}\n"
+                  response_message += f"*회의 일정*: {best_date} ({day_name_korean}) {best_time}\n"
                   response_message += "*참석자*: "
                   for participant in final_meeting_info['participants']:
                       response_message += f"<@{participant['user_id']}>님 "
